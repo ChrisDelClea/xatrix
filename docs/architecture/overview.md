@@ -40,11 +40,11 @@ Multiple ways to interact with the agent:
 
 The harness is the heart of xatrix. It:
 
-- **Loads System Prompt** from `workspace/SOUL.md` + active skills
+- **Loads System Prompt** from `xatrix/SOUL.md` + active skills
 - **Manages Conversation Flow** with session persistence
 - **Executes Tool Calls** from the LLM with validation
 - **Coordinates Job Queue** for async task processing
-- **Protects Core System** - workspace only, no core modifications
+- **Protects Core System** - agent branch isolation via git
 
 :::tip Immutable Core
 The harness itself cannot be modified by the agent, ensuring system stability.
@@ -83,7 +83,7 @@ response = brain.complete(
 - `memory_tool.py` - Memory storage and retrieval
 - `registry.py` - Tool registration and validation
 
-**Skills** (`workspace/skills/`):
+**Skills** (`xatrix/skills/`):
 - Defined in `SKILL.md` files
 - Loaded dynamically into system prompt
 - Agent can create new skills
@@ -93,42 +93,41 @@ response = brain.complete(
 
 ### User Request Flow
 
-```
-1. User Input
-   ↓
-2. Interface → Harness
-   ↓
-3. Harness constructs context:
-   - System prompt (SOUL.md + skills)
-   - Conversation history
-   - Available tools
-   ↓
-4. Harness → Brain (LLM)
-   ↓
-5. Brain returns:
-   - Text response, OR
-   - Tool call request
-   ↓
-6. If tool call:
-   - Harness validates & executes
-   - Result fed back to Brain
-   - Loop until final response
-   ↓
-7. Response → User
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant I as Interface
+    participant H as Harness
+    participant B as Brain (LLM)
+    participant T as Tools
+
+    U->>I: Input
+    I->>H: Forward message
+    H->>H: Build context (SOUL + skills + history)
+    H->>B: messages + tool schemas
+    alt Tool call
+        B->>H: tool_call request
+        H->>T: execute(tool, args)
+        T-->>H: result
+        H->>B: tool result
+        B->>H: final text response
+    else Direct response
+        B->>H: text response
+    end
+    H->>I: response
+    I->>U: Reply
 ```
 
 ### Job Queue Flow
 
 For async/long-running tasks:
 
-```
-1. User request → Job enqueued
-   ↓
-2. Worker picks up job
-   ↓
-3. Worker runs through harness
-   ↓
-4. Result stored/notified
+```mermaid
+graph LR
+    A[User Request] -->|enqueue| B[(Job Queue)]
+    B -->|dequeue| C[Worker Thread]
+    C -->|process| D[Harness]
+    D -->|result| E[Notify / Reply]
 ```
 
 See [Job Queue System](/architecture/job-queue) for details.
@@ -141,11 +140,12 @@ SQLite-based persistence:
 
 ```
 data/
-└── agent.db
-    ├── conversations      # Chat history
-    ├── memories          # User facts, preferences
-    ├── skills_cache      # Loaded skill metadata
-    └── job_queue         # Async task queue
+└── xatrix.db
+    ├── conversations      # Chat history per session
+    ├── facts              # User preferences, learned info
+    ├── state              # Key-value agent state
+    ├── scheduled_tasks    # Cron-like scheduled tasks
+    └── events             # Audit log of all tool calls
 ```
 
 Memory tools allow the agent to:
@@ -158,13 +158,13 @@ Memory tools allow the agent to:
 
 ### Protected vs. Modifiable
 
-**Protected (Read-only for agent):**
+**Protected (base branch):**
 - `xatrix/` - Core Python package
 - `bridges/` - Integration services
-- System configuration
 
-**Modifiable (Agent can edit):**
-- `workspace/` - Skills, SOUL.md, agent data
+**Agent branch (`xatrix/auto`):**
+- `xatrix/skills/` - Skills and SOUL.md
+- `xatrix/tools/` - Dynamic tools
 - `data/` - Database, logs
 
 ### Tool Safety
