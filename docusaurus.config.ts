@@ -62,7 +62,8 @@ const config: Config = {
       title: 'Xatrix',
       logo: {
         alt: 'Xatrix Logo',
-        src: 'img/logo.svg',
+        src: 'img/qr_white.jpg',
+        srcDark: 'img/logo.svg',
       },
       items: [
         {
